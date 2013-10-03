@@ -1,5 +1,5 @@
 --- Makefile.orig	2007-01-11 17:40:32.000000000 +0200
-+++ Makefile	2013-10-03 11:53:57.000000000 +0300
++++ Makefile	2013-10-03 15:09:56.000000000 +0300
 @@ -8,10 +8,10 @@ AUTH_DIR=/auth
  all: auth undeadly vuxml errata
  
@@ -13,8 +13,8 @@
  
  undeadly.o: undeadly.c cgi.h htsearch.h conf.h user.h mail.h
  	$(CC) -c undeadly.c
---- auth.c.orig		2007-08-20 16:25:00.000000000 +0300
-+++ auth.c	2013-10-03 11:49:57.000000000 +0300
+--- auth.c.orig	2007-08-20 16:25:00.000000000 +0300
++++ auth.c	2013-10-03 15:09:56.000000000 +0300
 @@ -35,7 +35,7 @@ static const char rcsid[] = "$Id: auth.c
  #include <sys/param.h>
  #include <sys/types.h>
@@ -40,7 +40,7 @@
  }
  
 --- captcha.c.orig	2006-09-27 00:39:12.000000000 +0300
-+++ captcha.c	2013-10-03 11:59:38.000000000 +0300
++++ captcha.c	2013-10-03 15:09:56.000000000 +0300
 @@ -37,7 +37,7 @@ static const char rcsid[] = "$Id: captch
  #include <sys/wait.h>
  #include <errno.h>
@@ -93,8 +93,19 @@
  	snprintf(sum, sumlen, "%s:%s", ts, h);
  
  	if (pipe(fd)) {
+--- mail.c.orig	2007-01-11 17:40:10.000000000 +0200
++++ mail.c	2013-10-03 15:10:19.000000000 +0300
+@@ -47,7 +47,7 @@ extern void	 msg(const char *fmt, ...);
+ int
+ mail_send(const char *body)
+ {
+-	char *argv[] = { "/undeadly.org/mini_sendmail", "-t", NULL };
++	char *argv[] = { "/usr/local/bin/mini_sendmail", "-t", NULL };
+ 	int fd[2], r, status;
+ 	pid_t pid;
+ 	FILE *f;
 --- undeadly.c.orig	2008-06-19 15:49:31.000000000 +0300
-+++ undeadly.c	2013-10-03 12:03:48.000000000 +0300
++++ undeadly.c	2013-10-03 15:09:56.000000000 +0300
 @@ -41,7 +41,7 @@ static const char rcsid[] = "$Id: undead
  #include <dirent.h>
  #include <errno.h>
@@ -119,8 +130,8 @@
  	if (strcmp(hash, sig)) {
  		memset(&user, 0, sizeof(user));
  		msg("check_auth: cookie signature %s != %s", sig, hash);
---- user.c.orig	2007-01-11 17:40:10.000000000 +0200
-+++ user.c	2012-10-10 16:55:38.000000000 +0300
+--- user.c.orig 	2007-01-11 17:40:10.000000000 +0200
++++ user.c	2013-10-03 15:09:56.000000000 +0300
 @@ -34,7 +34,7 @@
  #include <sys/stat.h>
  #include <errno.h>
