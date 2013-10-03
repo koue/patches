@@ -1,0 +1,147 @@
+--- Makefile.orig	2007-01-11 17:40:32.000000000 +0200
++++ Makefile	2013-10-03 11:53:57.000000000 +0300
+@@ -8,10 +8,10 @@ AUTH_DIR=/auth
+ all: auth undeadly vuxml errata
+ 
+ undeadly: undeadly.o cgi.o htsearch.o thres.o conf.o captcha.o user.o mail.o
+-	$(CC) -o undeadly undeadly.o cgi.o htsearch.o thres.o conf.o captcha.o user.o mail.o -lz
++	$(CC) -o undeadly undeadly.o cgi.o htsearch.o thres.o conf.o captcha.o user.o mail.o -lz -lmd
+ 
+ auth: auth.o cgi.o user.o
+-	$(CC) -o auth auth.o cgi.o user.o
++	$(CC) -o auth auth.o cgi.o user.o -lmd
+ 
+ undeadly.o: undeadly.c cgi.h htsearch.h conf.h user.h mail.h
+ 	$(CC) -c undeadly.c
+--- auth.c.orig		2007-08-20 16:25:00.000000000 +0300
++++ auth.c	2013-10-03 11:49:57.000000000 +0300
+@@ -35,7 +35,7 @@ static const char rcsid[] = "$Id: auth.c
+ #include <sys/param.h>
+ #include <sys/types.h>
+ #include <errno.h>
+-#include <sha1.h>
++#include <sha.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -139,10 +139,10 @@ sign(const char *salt, char *hash)
+ 	}
+ 	fclose(f);
+ 	s[strlen(s) - 1] = 0;
+-	SHA1Init(&ctx);
+-	SHA1Update(&ctx, salt, strlen(salt));
+-	SHA1Update(&ctx, s, strlen(s));
+-	SHA1End(&ctx, hash);
++	SHA1_Init(&ctx);
++	SHA1_Update(&ctx, salt, strlen(salt));
++	SHA1_Update(&ctx, s, strlen(s));
++	SHA1_End(&ctx, hash);
+ 	return (0);
+ }
+ 
+--- captcha.c.orig	2006-09-27 00:39:12.000000000 +0300
++++ captcha.c	2013-10-03 11:59:38.000000000 +0300
+@@ -37,7 +37,7 @@ static const char rcsid[] = "$Id: captch
+ #include <sys/wait.h>
+ #include <errno.h>
+ #include <fcntl.h>
+-#include <sha1.h>
++#include <sha.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -64,11 +64,11 @@ verify_captcha(unsigned char *reply, uns
+ 		return (1);
+ 	}
+ 	*p++ = 0;
+-	SHA1Init(&ctx);
+-	SHA1Update(&ctx, s, strlen(s));
+-	SHA1Update(&ctx, reply, strlen(reply));
+-	SHA1Update(&ctx, secret, strlen(secret));
+-	SHA1End(&ctx, hash);
++	SHA1_Init(&ctx);
++	SHA1_Update(&ctx, s, strlen(s));
++	SHA1_Update(&ctx, reply, strlen(reply));
++	SHA1_Update(&ctx, secret, strlen(secret));
++	SHA1_End(&ctx, hash);
+ 	if (strcmp(hash, p)) {
+ 		msg("warning verify_captcha: sum '%s' "
+ 		    "mismatches reply '%s'", sum, reply);
+@@ -95,7 +95,7 @@ generate_captcha(unsigned char *buf, uns
+ 	SHA1_CTX ctx;
+ 	int fd[2], r, status;
+ 	pid_t pid;
+-	char argv0[128] = "/undeadly.org/figlet", argv1[128] = "-f", argv2[128] = "big", argv3[128];
++	char argv0[128] = "/usr/local/bin/figlet", argv1[128] = "-f", argv2[128] = "big", argv3[128];
+ 	char *argv[] = { argv0, argv1, argv2, argv3, NULL };
+ 	FILE *f;
+ 	time_t t;
+@@ -105,11 +105,11 @@ generate_captcha(unsigned char *buf, uns
+ 	w[i] = 0;
+ 	snprintf(ts, sizeof(ts), "%u", (unsigned)time(NULL));
+ 
+-	SHA1Init(&ctx);
+-	SHA1Update(&ctx, ts, strlen(ts));
+-	SHA1Update(&ctx, w, strlen(w));
+-	SHA1Update(&ctx, secret, strlen(secret));
+-	SHA1End(&ctx, h);
++	SHA1_Init(&ctx);
++	SHA1_Update(&ctx, ts, strlen(ts));
++	SHA1_Update(&ctx, w, strlen(w));
++	SHA1_Update(&ctx, secret, strlen(secret));
++	SHA1_End(&ctx, h);
+ 	snprintf(sum, sumlen, "%s:%s", ts, h);
+ 
+ 	if (pipe(fd)) {
+--- undeadly.c.orig	2008-06-19 15:49:31.000000000 +0300
++++ undeadly.c	2013-10-03 12:03:48.000000000 +0300
+@@ -41,7 +41,7 @@ static const char rcsid[] = "$Id: undead
+ #include <dirent.h>
+ #include <errno.h>
+ #include <fts.h>
+-#include <sha1.h>
++#include <sha.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -2990,10 +2990,10 @@ check_auth(void)
+ 	}
+ 	sec[strlen(sec) - 1] = 0;
+ 	fclose(f);
+-	SHA1Init(&ctx);
+-	SHA1Update(&ctx, salt, strlen(salt));
+-	SHA1Update(&ctx, sec, strlen(sec));
+-	SHA1End(&ctx, hash);
++	SHA1_Init(&ctx);
++	SHA1_Update(&ctx, salt, strlen(salt));
++	SHA1_Update(&ctx, sec, strlen(sec));
++	SHA1_End(&ctx, hash);
+ 	if (strcmp(hash, sig)) {
+ 		memset(&user, 0, sizeof(user));
+ 		msg("check_auth: cookie signature %s != %s", sig, hash);
+--- user.c.orig	2007-01-11 17:40:10.000000000 +0200
++++ user.c	2012-10-10 16:55:38.000000000 +0300
+@@ -34,7 +34,7 @@
+ #include <sys/stat.h>
+ #include <errno.h>
+ #include <fcntl.h>
+-#include <sha1.h>
++#include <sha.h>
+ #include <stdio.h>
+ #include <string.h>
+ #include <unistd.h>
+@@ -108,10 +108,10 @@ user_hash(const char *password, char *ha
+ {
+ 	SHA1_CTX ctx;
+ 
+-	SHA1Init(&ctx);
+-	SHA1Update(&ctx, secret, strlen(secret));
+-	SHA1Update(&ctx, password, strlen(password));
+-	SHA1End(&ctx, hash);
++	SHA1_Init(&ctx);
++	SHA1_Update(&ctx, secret, strlen(secret));
++	SHA1_Update(&ctx, password, strlen(password));
++	SHA1_End(&ctx, hash);
+ }
+ 
+ int

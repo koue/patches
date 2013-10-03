@@ -1,0 +1,13 @@
+--- bandwidthd.c.orig	2009-06-24 03:52:03.000000000 +0300
++++ bandwidthd.c	2009-06-24 03:51:32.000000000 +0300
+@@ -406,6 +406,10 @@
+ 			else
+ 				printf("Unknown Datalink Type %d, defaulting to ethernet\nPlease forward this error message and a packet sample (captured with \"tcpdump -s 2000 -n -w capture.cap\") to hinkle@derbyworks.com\n", DataLink);
+ 			syslog(LOG_INFO, "Unkown datalink type, defaulting to ethernet");
++		case 117:
++			syslog(LOG_INFO, "Packet Encoding: PFLOG");
++			IP_Offset = 64;
++			break;
+ 		case DLT_EN10MB:
+ 			syslog(LOG_INFO, "Packet Encoding: Ethernet");
+ 			IP_Offset = 14; //IP_Offset = sizeof(struct ether_header);
