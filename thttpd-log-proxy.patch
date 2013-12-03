@@ -1,14 +1,14 @@
-diff -rupN thttpd-2.25b/libhttpd.c thttpd-2.25b-relayd/libhttpd.c
+diff -rupN thttpd-2.25b/libhttpd.c thttpd-2.25b-logproxy/libhttpd.c
 --- thttpd-2.25b/libhttpd.c	2005-06-29 20:50:39.000000000 +0300
-+++ thttpd-2.25b-relayd/libhttpd.c	2013-12-03 16:22:39.000000000 +0200
++++ thttpd-2.25b-logproxy/libhttpd.c	2013-12-03 16:22:39.000000000 +0200
 @@ -1727,6 +1727,10 @@ httpd_get_conn( httpd_server* hs, int li
      hc->pathinfo[0] = '\0';
      hc->query[0] = '\0';
      hc->referer = "";
-+/* koue relayd patch */
++/* koue logproxy patch */
 +	hc->x_forwarded_for = "";
 +	hc->x_forwarded_by = "";
-+/* end relayd patch */
++/* end logproxy patch */
      hc->useragent = "";
      hc->accept[0] = '\0';
      hc->accepte[0] = '\0';
@@ -16,7 +16,7 @@ diff -rupN thttpd-2.25b/libhttpd.c thttpd-2.25b-relayd/libhttpd.c
  		cp += strspn( cp, " \t" );
  		hc->useragent = cp;
  		}
-+		/* koue relayd patch */
++		/* koue logproxy patch */
 +		else if ( strncasecmp( buf, "X-Forwarded-For:", 16 ) == 0 )
 +		{
 +			cp = &buf[16];
@@ -29,7 +29,7 @@ diff -rupN thttpd-2.25b/libhttpd.c thttpd-2.25b-relayd/libhttpd.c
 +			cp +=strspn( cp, " \t" );
 +			hc->x_forwarded_by = cp;
 +		}
-+		/* end relayd patch */
++		/* end logproxy patch */
  	    else if ( strncasecmp( buf, "Host:", 5 ) == 0 )
  		{
  		cp = &buf[5];
@@ -37,12 +37,12 @@ diff -rupN thttpd-2.25b/libhttpd.c thttpd-2.25b-relayd/libhttpd.c
  	"REMOTE_ADDR=%s", httpd_ntoa( &hc->client_addr ) );
      if ( hc->referer[0] != '\0' )
  	envp[envn++] = build_env( "HTTP_REFERER=%s", hc->referer );
-+/* koue relayd patch */
++/* koue logproxy patch */
 +	if ( hc->x_forwarded_for[0] != '\0' )
 +		envp[envn++] = build_env( "X-Forwarded-For=%s", hc->x_forwarded_for );
 +	if ( hc->x_forwarded_by[0] != '\0' )
 +		envp[envn++] = build_env( "X-Forwarded-By=%s", hc->x_forwarded_by );
-+/* end relayd patch */
++/* end logproxy patch */
      if ( hc->useragent[0] != '\0' )
  	envp[envn++] = build_env( "HTTP_USER_AGENT=%s", hc->useragent );
      if ( hc->accept[0] != '\0' )
@@ -55,7 +55,7 @@ diff -rupN thttpd-2.25b/libhttpd.c thttpd-2.25b-relayd/libhttpd.c
 -	    httpd_ntoa( &hc->client_addr ), ru, date,
 -	    httpd_method_str( hc->method ), url, hc->protocol,
 -	    hc->status, bytes, hc->referer, hc->useragent );
-+	/* koue relayd patch */
++	/* koue logproxy patch */
 +	if ( (hc->x_forwarded_by[0] != '\0') && (hc->x_forwarded_for[0] != '\0') ) {
 +		(void) fprintf( hc->hs->logfp,
 +	    		"[%.80s] by [%.80s] - %.80s [%s] \"%.80s %.300s %.80s\" %d %s \"%.200s\" \"%.200s\"\n",
@@ -70,13 +70,13 @@ diff -rupN thttpd-2.25b/libhttpd.c thttpd-2.25b-relayd/libhttpd.c
 +	    		httpd_method_str( hc->method ), url, hc->protocol,
 +	    		hc->status, bytes, hc->referer, hc->useragent );
 +	}
-+	/* end relayd patch */
++	/* end logproxy patch */
  #ifdef FLUSH_LOG_EVERY_TIME
  	(void) fflush( hc->hs->logfp );
  #endif
  	}
      else
-+	/* koue relayd patch */
++	/* koue logproxy patch */
 +	if ( (hc->x_forwarded_by[0] != '\0') && (hc->x_forwarded_for[0] != '\0') ) {
 +		syslog( LOG_INFO,
 +			"[%.80s] by [%.80s] - %.80s \"%.80s %.200s %.80s\" %d %s \"%.200s\" \"%.200s\"",
@@ -91,21 +91,21 @@ diff -rupN thttpd-2.25b/libhttpd.c thttpd-2.25b-relayd/libhttpd.c
  	    httpd_method_str( hc->method ), url, hc->protocol,
  	    hc->status, bytes, hc->referer, hc->useragent );
 +	}
-+	/* end relayd patch */
++	/* end logproxy patch */
      }
  
  
-diff -rupN thttpd-2.25b/libhttpd.h thttpd-2.25b-relayd/libhttpd.h
+diff -rupN thttpd-2.25b/libhttpd.h thttpd-2.25b-logproxy/libhttpd.h
 --- thttpd-2.25b/libhttpd.h	2005-06-29 20:50:41.000000000 +0300
-+++ thttpd-2.25b-relayd/libhttpd.h	2013-12-03 16:22:39.000000000 +0200
++++ thttpd-2.25b-logproxy/libhttpd.h	2013-12-03 16:22:39.000000000 +0200
 @@ -108,6 +108,10 @@ typedef struct {
      char* pathinfo;
      char* query;
      char* referer;
-+/* koue relayd patch */
++/* koue logproxy patch */
 +	char*	x_forwarded_for;
 +	char*	x_forwarded_by;
-+/* end relayd patch */
++/* end logproxy patch */
      char* useragent;
      char* accept;
      char* accepte;
