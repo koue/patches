@@ -1,0 +1,319 @@
+diff -rupN dhcpd.orig/Makefile dhcpd/Makefile
+--- dhcpd.orig/Makefile	2015-02-02 17:15:30.000000000 +0200
++++ dhcpd/Makefile	2015-02-03 11:36:33.000000000 +0200
+@@ -9,7 +9,7 @@ SRCS=	bootp.c confpars.c db.c dhcp.c dhc
+ PROG=	dhcpd
+ MAN=	dhcpd.8 dhcpd.conf.5 dhcpd.leases.5 dhcp-options.5
+ 
+-LDADD+=-lcrypto
++LDADD+=-lcrypto -lmd
+ CFLAGS+=-Wall
+ 
+ .include <bsd.prog.mk>
+diff -rupN dhcpd.orig/bpf.c dhcpd/bpf.c
+--- dhcpd.orig/bpf.c	2015-02-02 17:15:30.000000000 +0200
++++ dhcpd/bpf.c	2015-02-02 18:09:30.000000000 +0200
+@@ -194,8 +194,10 @@ if_register_receive(struct interface_inf
+ 	if (ioctl(info->rfdesc, BIOCIMMEDIATE, &flag) == -1)
+ 		error("Can't set immediate mode on bpf device: %m");
+ 
++#if 0
+ 	if (ioctl(info->rfdesc, BIOCSFILDROP, &flag) == -1)
+ 		error("Can't set filter-drop mode on bpf device: %m");
++#endif
+ 
+ 	/* make sure kernel fills in the source ethernet address */
+ 	if (ioctl(info->rfdesc, BIOCSHDRCMPLT, &cmplt) == -1)
+diff -rupN dhcpd.orig/dhcpd.c dhcpd/dhcpd.c
+--- dhcpd.orig/dhcpd.c	2015-02-02 17:15:30.000000000 +0200
++++ dhcpd/dhcpd.c	2015-02-03 12:18:31.000000000 +0200
+@@ -66,7 +66,11 @@ char *path_dhcpd_db = _PATH_DHCPD_DB;
+ char *abandoned_tab = NULL;
+ char *changedmac_tab = NULL;
+ char *leased_tab = NULL;
+-struct syslog_data sdata = SYSLOG_DATA_INIT;
++#ifdef __FreeBSD__
++	static int use_syslog = 0;
++#else
++	struct syslog_data sdata = SYSLOG_DATA_INIT;
++#endif
+ 
+ int
+ main(int argc, char *argv[])
+@@ -80,7 +84,11 @@ main(int argc, char *argv[])
+ 	struct in_addr udpaddr;
+ 
+ 	/* Initially, log errors to stderr as well as to syslogd. */
++#ifdef __FreeBSD__
++	use_syslog = 1;
++#else
+ 	openlog_r(__progname, LOG_PID | LOG_NDELAY, DHCPD_LOG_FACILITY, &sdata);
++#endif
+ 
+ 	opterr = 0;
+ 	while ((ch = getopt(argc, argv, "A:C:L:c:dfl:nu::Y:y:")) != -1)
+@@ -182,11 +190,11 @@ main(int argc, char *argv[])
+ 	db_startup();
+ 	if (!udpsockmode || argc > 0)
+ 		discover_interfaces(&rdomain);
+-
++#if 0
+ 	if (rdomain != -1)
+ 		if (setrtable(rdomain) == -1)
+ 			error("setrtable (%m)");
+-
++#endif
+ 	if (udpsockmode)
+ 		udpsock_startup(udpaddr);
+ 	icmp_startup(1, lease_pinged);
+@@ -216,7 +224,7 @@ main(int argc, char *argv[])
+ 			exit(1);
+ 		case 0:
+ 			/* child process. start up table engine */
+-			pftable_handler();
++			 pftable_handler(); 
+ 			/* NOTREACHED */
+ 			exit(1);
+ 		default:
+@@ -225,8 +233,10 @@ main(int argc, char *argv[])
+ 		}
+ 	}
+ 
+-	if (chroot(_PATH_VAREMPTY) == -1)
+-		error("chroot %s: %m", _PATH_VAREMPTY);
++	/*if (chroot(_PATH_VAREMPTY) == -1)
++		error("chroot %s: %m", _PATH_VAREMPTY); */
++	if (chroot("/var/empty") == -1)
++		error("chroot %s: %m", "/var/empty");
+ 	if (chdir("/") == -1)
+ 		error("chdir(\"/\"): %m");
+ 	if (setgroups(1, &pw->pw_gid) ||
+diff -rupN dhcpd.orig/dhcpd.h dhcpd/dhcpd.h
+--- dhcpd.orig/dhcpd.h	2015-02-02 17:15:30.000000000 +0200
++++ dhcpd/dhcpd.h	2015-02-02 17:43:58.000000000 +0200
+@@ -692,7 +692,7 @@ int icmp_echorequest(struct iaddr *);
+ void icmp_echoreply(struct protocol *);
+ 
+ /* pfutils.c */
+-__dead void pftable_handler(void);
++__dead2 void pftable_handler(void);
+ void pf_change_table(int, int, struct in_addr, char *);
+ void pf_kill_state(int, struct in_addr);
+ size_t atomicio(ssize_t (*)(int, void *, size_t), int, void *, size_t);
+diff -rupN dhcpd.orig/dispatch.c dhcpd/dispatch.c
+--- dhcpd.orig/dispatch.c	2015-02-02 17:15:30.000000000 +0200
++++ dhcpd/dispatch.c	2015-02-03 12:36:59.000000000 +0200
+@@ -45,6 +45,11 @@
+ #include <poll.h>
+ #include <net/if_media.h>
+ 
++#include <sys/types.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdlib.h>
++
+ extern int syncfd;
+ 
+ struct interface_info *interfaces;
+@@ -61,6 +66,24 @@ int get_rdomain(char *);
+    register that interface with the network I/O software, figure out what
+    subnet it's on, and add it to the list of interfaces. */
+ 
++/*
++ * This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
++ * if both s1 < MUL_NO_OVERFLOW and s2 < MUL_NO_OVERFLOW
++ */
++#define MUL_NO_OVERFLOW ((size_t)1 << (sizeof(size_t) * 4))
++
++void *
++reallocarray(void *optr, size_t nmemb, size_t size)
++{
++        if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
++            nmemb > 0 && SIZE_MAX / nmemb < size) {
++                errno = ENOMEM;
++                return NULL;
++        }
++        return realloc(optr, size * nmemb);
++}
++
++
+ void
+ discover_interfaces(int *rdomain)
+ {
+@@ -633,8 +656,10 @@ get_rdomain(char *name)
+ 
+ 	bzero(&ifr, sizeof(ifr));
+ 	strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+-	if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+-		rv = ifr.ifr_rdomainid;
++	//if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
++	if (ioctl(s, SIOCGIFFIB, (caddr_t)&ifr) != -1)
++		//rv = ifr.ifr_rdomainid;
++		rv = ifr.ifr_fib;
+ 
+ 	close(s);
+ 	return rv;
+diff -rupN dhcpd.orig/errwarn.c dhcpd/errwarn.c
+--- dhcpd.orig/errwarn.c	2015-02-02 17:15:30.000000000 +0200
++++ dhcpd/errwarn.c	2015-02-02 18:20:57.000000000 +0200
+@@ -47,6 +47,10 @@
+ 
+ #include "dhcpd.h"
+ 
++#ifdef __FreeBSD__
++        static int use_syslog = 0;
++#endif
++
+ static void do_percentm(char *obuf, size_t size, char *ibuf);
+ 
+ static char mbuf[1024];
+@@ -73,13 +77,21 @@ error(char *fmt, ...)
+ 		write(STDERR_FILENO, mbuf, strlen(mbuf));
+ 		write(STDERR_FILENO, "\n", 1);
+ 	} else
++#ifdef __FreeBSD__
++        use_syslog = 1;
++#else
+ 		syslog_r(log_priority | LOG_ERR, &sdata, "%s", mbuf);
++#endif
+ 
+ 	if (log_perror) {
+ 		fprintf(stderr, "exiting.\n");
+ 		fflush(stderr);
+ 	} else
++#ifdef __FreeBSD__
++        use_syslog = 1;
++#else
+ 		syslog_r(LOG_CRIT, &sdata, "exiting.");
++#endif
+ 
+ 	exit(1);
+ }
+@@ -102,7 +114,11 @@ warning(char *fmt, ...)
+ 		write(STDERR_FILENO, mbuf, strlen(mbuf));
+ 		write(STDERR_FILENO, "\n", 1);
+ 	} else
++#ifdef __FreeBSD__
++        use_syslog = 1;
++#else
+ 		syslog_r(log_priority | LOG_ERR, &sdata, "%s", mbuf);
++#endif
+ 
+ 	return (0);
+ }
+@@ -125,7 +141,11 @@ note(char *fmt, ...)
+ 		write(STDERR_FILENO, mbuf, strlen(mbuf));
+ 		write(STDERR_FILENO, "\n", 1);
+ 	} else
++#ifdef __FreeBSD__
++        use_syslog = 1;
++#else
+ 		syslog_r(log_priority | LOG_INFO, &sdata, "%s", mbuf);
++#endif
+ 
+ 	return (0);
+ }
+@@ -148,7 +168,11 @@ debug(char *fmt, ...)
+ 		write(STDERR_FILENO, mbuf, strlen(mbuf));
+ 		write(STDERR_FILENO, "\n", 1);
+ 	} else
++#ifdef __FreeBSD__
++        use_syslog = 1;
++#else
+ 		syslog_r(log_priority | LOG_DEBUG, &sdata, "%s", mbuf);
++#endif
+ 
+ 	return (0);
+ }
+@@ -226,11 +250,19 @@ parse_warn(char *fmt, ...)
+ 		}
+ 		writev(STDERR_FILENO, iov, iovcnt);
+ 	} else {
++#ifdef __FreeBSD__
++        use_syslog = 1;
++#else
+ 		syslog_r(log_priority | LOG_ERR, &sdata, "%s", mbuf);
+ 		syslog_r(log_priority | LOG_ERR, &sdata, "%s", token_line);
++#endif
+ 		if (lexchar < 81)
++#ifdef __FreeBSD__
++        use_syslog = 1;
++#else
+ 			syslog_r(log_priority | LOG_ERR, &sdata, "%*c", lexchar,
+ 			    '^');
++#endif
+ 	}
+ 
+ 	warnings_occurred = 1;
+diff -rupN dhcpd.orig/pfutils.c dhcpd/pfutils.c
+--- dhcpd.orig/pfutils.c	2015-02-02 17:15:30.000000000 +0200
++++ dhcpd/pfutils.c	2015-02-02 18:12:50.000000000 +0200
+@@ -45,7 +45,7 @@ extern char *abandoned_tab;
+ extern char *changedmac_tab;
+ extern char *leased_tab;
+ 
+-__dead void
++__dead2 void
+ pftable_handler()
+ {
+ 	struct pf_cmd cmd;
+@@ -54,8 +54,11 @@ pftable_handler()
+ 
+ 	if ((fd = open(_PATH_DEV_PF, O_RDWR|O_NOFOLLOW, 0660)) == -1)
+ 		error("can't open pf device: %m");
+-	if (chroot(_PATH_VAREMPTY) == -1)
++	/* if (chroot(_PATH_VAREMPTY) == -1)
+ 		error("chroot %s: %m", _PATH_VAREMPTY);
++	*/
++	if (chroot("/var/empty") == -1)
++		error("chroot %s: %m", "/var/empty");
+ 	if (chdir("/") == -1)
+ 		error("chdir(\"/\"): %m");
+ 	if (setgroups(1, &pw->pw_gid) ||
+diff -rupN dhcpd.orig/sync.c dhcpd/sync.c
+--- dhcpd.orig/sync.c	2015-02-02 17:15:30.000000000 +0200
++++ dhcpd/sync.c	2015-02-02 18:21:32.000000000 +0200
+@@ -38,7 +38,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
+-#include <sha1.h>
++#include <sha.h>
+ 
+ #include <netdb.h>
+ 
+@@ -47,6 +47,10 @@
+ #include "dhcpd.h"
+ #include "sync.h"
+ 
++#ifdef __FreeBSD__
++        static int use_syslog = 0;
++#endif
++
+ int sync_debug;
+ 
+ u_int32_t sync_counter;
+@@ -144,7 +148,7 @@ sync_init(const char *iface, const char 
+ 		}
+ 	}
+ 
+-	sync_key = SHA1File(DHCP_SYNC_KEY, NULL);
++	sync_key = SHA1_File(DHCP_SYNC_KEY, NULL);
+ 	if (sync_key == NULL) {
+ 		if (errno != ENOENT) {
+ 			fprintf(stderr, "failed to open sync key: %s\n",
+@@ -224,10 +228,14 @@ sync_init(const char *iface, const char 
+ 	}
+ 
+ 	if (sync_debug)
++#ifdef __FreeBSD__
++        use_syslog = 1;
++#else
+ 		syslog_r(LOG_DEBUG, &sdata, "using multicast dhcp sync %smode "
+ 		    "(ttl %u, group %s, port %d)\n",
+ 		    sendmcast ? "" : "receive ",
+ 		    ttl, inet_ntoa(sync_out.sin_addr), port);
++#endif
+ 
+ 	return (syncfd);
+ 
