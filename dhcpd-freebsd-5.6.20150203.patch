@@ -1,6 +1,6 @@
-diff -rupN dhcpd.orig/Makefile dhcpd/Makefile
---- dhcpd.orig/Makefile	2015-02-05 11:21:53.000000000 +0200
-+++ dhcpd/Makefile	2015-02-04 12:24:10.000000000 +0200
+diff -rupN /home/koue/tmp/dhcpd/Makefile dhcpd/Makefile
+--- /home/koue/tmp/dhcpd/Makefile	2015-02-05 16:02:55.000000000 +0200
++++ dhcpd/Makefile	2015-02-05 14:52:47.000000000 +0200
 @@ -5,11 +5,11 @@
  SRCS=	bootp.c confpars.c db.c dhcp.c dhcpd.c bpf.c packet.c errwarn.c \
  	dispatch.c print.c memory.c options.c inet.c conflex.c parse.c \
@@ -16,9 +16,9 @@ diff -rupN dhcpd.orig/Makefile dhcpd/Makefile
 +CFLAGS+=-Wall -D__dead=''
  
  .include <bsd.prog.mk>
-diff -rupN dhcpd.orig/bpf.c dhcpd/bpf.c
---- dhcpd.orig/bpf.c	2015-02-05 11:21:53.000000000 +0200
-+++ dhcpd/bpf.c	2015-02-04 12:24:10.000000000 +0200
+diff -rupN /home/koue/tmp/dhcpd/bpf.c dhcpd/bpf.c
+--- /home/koue/tmp/dhcpd/bpf.c	2015-02-05 16:02:55.000000000 +0200
++++ dhcpd/bpf.c	2015-02-05 14:52:47.000000000 +0200
 @@ -194,8 +194,10 @@ if_register_receive(struct interface_inf
  	if (ioctl(info->rfdesc, BIOCIMMEDIATE, &flag) == -1)
  		error("Can't set immediate mode on bpf device: %m");
@@ -30,35 +30,31 @@ diff -rupN dhcpd.orig/bpf.c dhcpd/bpf.c
  
  	/* make sure kernel fills in the source ethernet address */
  	if (ioctl(info->rfdesc, BIOCSHDRCMPLT, &cmplt) == -1)
-diff -rupN dhcpd.orig/dhcpd.c dhcpd/dhcpd.c
---- dhcpd.orig/dhcpd.c	2015-02-05 11:21:54.000000000 +0200
-+++ dhcpd/dhcpd.c	2015-02-04 12:24:10.000000000 +0200
-@@ -66,7 +66,11 @@ char *path_dhcpd_db = _PATH_DHCPD_DB;
+diff -rupN /home/koue/tmp/dhcpd/dhcpd.c dhcpd/dhcpd.c
+--- /home/koue/tmp/dhcpd/dhcpd.c	2015-02-05 16:02:55.000000000 +0200
++++ dhcpd/dhcpd.c	2015-02-05 14:52:47.000000000 +0200
+@@ -66,7 +66,9 @@ char *path_dhcpd_db = _PATH_DHCPD_DB;
  char *abandoned_tab = NULL;
  char *changedmac_tab = NULL;
  char *leased_tab = NULL;
 -struct syslog_data sdata = SYSLOG_DATA_INIT;
-+#ifdef __FreeBSD__
-+	static int use_syslog = 0;
-+#else
++#ifndef __FreeBSD__
 +	struct syslog_data sdata = SYSLOG_DATA_INIT;
 +#endif
  
  int
  main(int argc, char *argv[])
-@@ -80,7 +84,11 @@ main(int argc, char *argv[])
+@@ -80,7 +82,9 @@ main(int argc, char *argv[])
  	struct in_addr udpaddr;
  
  	/* Initially, log errors to stderr as well as to syslogd. */
-+#ifdef __FreeBSD__
-+	use_syslog = 1;
-+#else
++#ifndef __FreeBSD__
  	openlog_r(__progname, LOG_PID | LOG_NDELAY, DHCPD_LOG_FACILITY, &sdata);
 +#endif
  
  	opterr = 0;
  	while ((ch = getopt(argc, argv, "A:C:L:c:dfl:nu::Y:y:")) != -1)
-@@ -182,11 +190,14 @@ main(int argc, char *argv[])
+@@ -182,11 +186,14 @@ main(int argc, char *argv[])
  	db_startup();
  	if (!udpsockmode || argc > 0)
  		discover_interfaces(&rdomain);
@@ -75,7 +71,7 @@ diff -rupN dhcpd.orig/dhcpd.c dhcpd/dhcpd.c
  	if (udpsockmode)
  		udpsock_startup(udpaddr);
  	icmp_startup(1, lease_pinged);
-@@ -216,7 +227,7 @@ main(int argc, char *argv[])
+@@ -216,7 +223,7 @@ main(int argc, char *argv[])
  			exit(1);
  		case 0:
  			/* child process. start up table engine */
@@ -84,7 +80,7 @@ diff -rupN dhcpd.orig/dhcpd.c dhcpd/dhcpd.c
  			/* NOTREACHED */
  			exit(1);
  		default:
-@@ -224,9 +235,13 @@ main(int argc, char *argv[])
+@@ -224,9 +231,13 @@ main(int argc, char *argv[])
  			break;
  		}
  	}
@@ -99,10 +95,19 @@ diff -rupN dhcpd.orig/dhcpd.c dhcpd/dhcpd.c
  	if (chdir("/") == -1)
  		error("chdir(\"/\"): %m");
  	if (setgroups(1, &pw->pw_gid) ||
-diff -rupN dhcpd.orig/dispatch.c dhcpd/dispatch.c
---- dhcpd.orig/dispatch.c	2015-02-05 11:21:54.000000000 +0200
-+++ dhcpd/dispatch.c	2015-02-04 12:24:10.000000000 +0200
-@@ -633,9 +633,13 @@ get_rdomain(char *name)
+diff -rupN /home/koue/tmp/dhcpd/dispatch.c dhcpd/dispatch.c
+--- /home/koue/tmp/dhcpd/dispatch.c	2015-02-05 16:02:55.000000000 +0200
++++ dhcpd/dispatch.c	2015-02-05 14:52:47.000000000 +0200
+@@ -45,6 +45,8 @@
+ #include <poll.h>
+ #include <net/if_media.h>
+ 
++#include "reallocarray.h"
++
+ extern int syncfd;
+ 
+ struct interface_info *interfaces;
+@@ -633,9 +635,13 @@ get_rdomain(char *name)
  
  	bzero(&ifr, sizeof(ifr));
  	strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
@@ -117,26 +122,15 @@ diff -rupN dhcpd.orig/dispatch.c dhcpd/dispatch.c
  	close(s);
  	return rv;
  }
-diff -rupN dhcpd.orig/errwarn.c dhcpd/errwarn.c
---- dhcpd.orig/errwarn.c	2015-02-05 11:21:54.000000000 +0200
-+++ dhcpd/errwarn.c	2015-02-04 12:24:10.000000000 +0200
-@@ -47,6 +47,10 @@
- 
- #include "dhcpd.h"
- 
-+#ifdef __FreeBSD__
-+        static int use_syslog = 0;
-+#endif
-+
- static void do_percentm(char *obuf, size_t size, char *ibuf);
- 
- static char mbuf[1024];
-@@ -73,13 +77,21 @@ error(char *fmt, ...)
+diff -rupN /home/koue/tmp/dhcpd/errwarn.c dhcpd/errwarn.c
+--- /home/koue/tmp/dhcpd/errwarn.c	2015-02-05 16:02:55.000000000 +0200
++++ dhcpd/errwarn.c	2015-02-05 14:52:47.000000000 +0200
+@@ -73,13 +73,21 @@ error(char *fmt, ...)
  		write(STDERR_FILENO, mbuf, strlen(mbuf));
  		write(STDERR_FILENO, "\n", 1);
  	} else
 +#ifdef __FreeBSD__
-+        use_syslog = 1;
++		syslog(log_priority | LOG_ERR, "%s", mbuf);
 +#else
  		syslog_r(log_priority | LOG_ERR, &sdata, "%s", mbuf);
 +#endif
@@ -146,62 +140,63 @@ diff -rupN dhcpd.orig/errwarn.c dhcpd/errwarn.c
  		fflush(stderr);
  	} else
 +#ifdef __FreeBSD__
-+        use_syslog = 1;
++		syslog(LOG_CRIT, "exiting.");
 +#else
  		syslog_r(LOG_CRIT, &sdata, "exiting.");
 +#endif
  
  	exit(1);
  }
-@@ -102,7 +114,11 @@ warning(char *fmt, ...)
+@@ -102,7 +110,11 @@ warning(char *fmt, ...)
  		write(STDERR_FILENO, mbuf, strlen(mbuf));
  		write(STDERR_FILENO, "\n", 1);
  	} else
 +#ifdef __FreeBSD__
-+        use_syslog = 1;
++		syslog(log_priority | LOG_ERR, "%s", mbuf);
 +#else
  		syslog_r(log_priority | LOG_ERR, &sdata, "%s", mbuf);
 +#endif
  
  	return (0);
  }
-@@ -125,7 +141,11 @@ note(char *fmt, ...)
+@@ -125,7 +137,11 @@ note(char *fmt, ...)
  		write(STDERR_FILENO, mbuf, strlen(mbuf));
  		write(STDERR_FILENO, "\n", 1);
  	} else
 +#ifdef __FreeBSD__
-+        use_syslog = 1;
++		syslog(log_priority | LOG_INFO, "%s", mbuf);
 +#else
  		syslog_r(log_priority | LOG_INFO, &sdata, "%s", mbuf);
 +#endif
  
  	return (0);
  }
-@@ -148,7 +168,11 @@ debug(char *fmt, ...)
+@@ -148,7 +164,11 @@ debug(char *fmt, ...)
  		write(STDERR_FILENO, mbuf, strlen(mbuf));
  		write(STDERR_FILENO, "\n", 1);
  	} else
 +#ifdef __FreeBSD__
-+        use_syslog = 1;
++		syslog(log_priority | LOG_DEBUG, "%s", mbuf);
 +#else
  		syslog_r(log_priority | LOG_DEBUG, &sdata, "%s", mbuf);
 +#endif
  
  	return (0);
  }
-@@ -226,11 +250,19 @@ parse_warn(char *fmt, ...)
+@@ -226,11 +246,20 @@ parse_warn(char *fmt, ...)
  		}
  		writev(STDERR_FILENO, iov, iovcnt);
  	} else {
 +#ifdef __FreeBSD__
-+        use_syslog = 1;
++		syslog(log_priority | LOG_ERR, "%s", mbuf);
++		syslog(log_priority | LOG_ERR, "%s", token_line);
 +#else
  		syslog_r(log_priority | LOG_ERR, &sdata, "%s", mbuf);
  		syslog_r(log_priority | LOG_ERR, &sdata, "%s", token_line);
 +#endif
  		if (lexchar < 81)
 +#ifdef __FreeBSD__
-+        use_syslog = 1;
++			syslog(log_priority | LOG_ERR, "%*c", lexchar, '^');
 +#else
  			syslog_r(log_priority | LOG_ERR, &sdata, "%*c", lexchar,
  			    '^');
@@ -209,9 +204,9 @@ diff -rupN dhcpd.orig/errwarn.c dhcpd/errwarn.c
  	}
  
  	warnings_occurred = 1;
-diff -rupN dhcpd.orig/pfutils.c dhcpd/pfutils.c
---- dhcpd.orig/pfutils.c	2015-02-05 11:21:54.000000000 +0200
-+++ dhcpd/pfutils.c	2015-02-04 12:24:10.000000000 +0200
+diff -rupN /home/koue/tmp/dhcpd/pfutils.c dhcpd/pfutils.c
+--- /home/koue/tmp/dhcpd/pfutils.c	2015-02-05 16:02:55.000000000 +0200
++++ dhcpd/pfutils.c	2015-02-05 14:52:47.000000000 +0200
 @@ -54,8 +54,13 @@ pftable_handler()
  
  	if ((fd = open(_PATH_DEV_PF, O_RDWR|O_NOFOLLOW, 0660)) == -1)
@@ -227,9 +222,9 @@ diff -rupN dhcpd.orig/pfutils.c dhcpd/pfutils.c
  	if (chdir("/") == -1)
  		error("chdir(\"/\"): %m");
  	if (setgroups(1, &pw->pw_gid) ||
-diff -rupN dhcpd.orig/reallocarray.c dhcpd/reallocarray.c
---- dhcpd.orig/reallocarray.c	1970-01-01 02:00:00.000000000 +0200
-+++ dhcpd/reallocarray.c	2015-02-04 12:24:10.000000000 +0200
+diff -rupN /home/koue/tmp/dhcpd/reallocarray.c dhcpd/reallocarray.c
+--- /home/koue/tmp/dhcpd/reallocarray.c	1970-01-01 02:00:00.000000000 +0200
++++ dhcpd/reallocarray.c	2015-02-05 14:52:47.000000000 +0200
 @@ -0,0 +1,38 @@
 +/*	$OpenBSD: reallocarray.c,v 1.1 2014/05/08 21:43:49 deraadt Exp $	*/
 +/*
@@ -269,9 +264,49 @@ diff -rupN dhcpd.orig/reallocarray.c dhcpd/reallocarray.c
 +	}
 +	return realloc(optr, size * nmemb);
 +}
-diff -rupN dhcpd.orig/sync.c dhcpd/sync.c
---- dhcpd.orig/sync.c	2015-02-05 11:21:54.000000000 +0200
-+++ dhcpd/sync.c	2015-02-04 12:24:10.000000000 +0200
+diff -rupN /home/koue/tmp/dhcpd/reallocarray.h dhcpd/reallocarray.h
+--- /home/koue/tmp/dhcpd/reallocarray.h	1970-01-01 02:00:00.000000000 +0200
++++ dhcpd/reallocarray.h	2015-02-05 14:52:47.000000000 +0200
+@@ -0,0 +1,36 @@
++/*
++ * Copyright (c) 2015 Nikola Kolev
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ *
++ *    - Redistributions of source code must retain the above copyright
++ *      notice, this list of conditions and the following disclaimer.
++ *    - Redistributions in binary form must reproduce the above
++ *      copyright notice, this list of conditions and the following
++ *      disclaimer in the documentation and/or other materials provided
++ *      with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
++ * COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
++ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
++ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ *
++ */
++
++#ifndef _REALLOCARRAY_H_
++#define _REALLOCARRAY_H_
++
++void *reallocarray(void *, size_t, size_t);
++
++#endif
+diff -rupN /home/koue/tmp/dhcpd/sync.c dhcpd/sync.c
+--- /home/koue/tmp/dhcpd/sync.c	2015-02-05 16:02:55.000000000 +0200
++++ dhcpd/sync.c	2015-02-05 14:52:47.000000000 +0200
 @@ -38,7 +38,7 @@
  #include <stdlib.h>
  #include <string.h>
@@ -281,18 +316,7 @@ diff -rupN dhcpd.orig/sync.c dhcpd/sync.c
  
  #include <netdb.h>
  
-@@ -47,6 +47,10 @@
- #include "dhcpd.h"
- #include "sync.h"
- 
-+#ifdef __FreeBSD__
-+        static int use_syslog = 0;
-+#endif
-+
- int sync_debug;
- 
- u_int32_t sync_counter;
-@@ -144,7 +148,7 @@ sync_init(const char *iface, const char 
+@@ -144,7 +144,7 @@ sync_init(const char *iface, const char 
  		}
  	}
  
@@ -301,12 +325,15 @@ diff -rupN dhcpd.orig/sync.c dhcpd/sync.c
  	if (sync_key == NULL) {
  		if (errno != ENOENT) {
  			fprintf(stderr, "failed to open sync key: %s\n",
-@@ -224,10 +228,14 @@ sync_init(const char *iface, const char 
+@@ -224,10 +224,17 @@ sync_init(const char *iface, const char 
  	}
  
  	if (sync_debug)
 +#ifdef __FreeBSD__
-+        use_syslog = 1;
++		syslog(LOG_DEBUG, "using multicast dhcp sync %smode "
++			"(ttl %u, group %s, port %d)\n",
++			sendmcast ? "" : "receive ",
++			ttl, inet_ntoa(sync_out.sin_addr), port);
 +#else
  		syslog_r(LOG_DEBUG, &sdata, "using multicast dhcp sync %smode "
  		    "(ttl %u, group %s, port %d)\n",
