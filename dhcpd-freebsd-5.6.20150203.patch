@@ -1,23 +1,29 @@
 diff -rupN dhcpd.orig/Makefile dhcpd/Makefile
---- dhcpd.orig/Makefile	2015-02-02 17:15:30.000000000 +0200
-+++ dhcpd/Makefile	2015-02-03 11:36:33.000000000 +0200
-@@ -9,7 +9,7 @@ SRCS=	bootp.c confpars.c db.c dhcp.c dhc
+--- dhcpd.orig/Makefile	2015-02-05 11:21:53.000000000 +0200
++++ dhcpd/Makefile	2015-02-04 12:24:10.000000000 +0200
+@@ -5,11 +5,11 @@
+ SRCS=	bootp.c confpars.c db.c dhcp.c dhcpd.c bpf.c packet.c errwarn.c \
+ 	dispatch.c print.c memory.c options.c inet.c conflex.c parse.c \
+ 	alloc.c tables.c tree.c hash.c convert.c icmp.c pfutils.c sync.c \
+-	udpsock.c
++	udpsock.c reallocarray.c
  PROG=	dhcpd
  MAN=	dhcpd.8 dhcpd.conf.5 dhcpd.leases.5 dhcp-options.5
  
 -LDADD+=-lcrypto
+-CFLAGS+=-Wall
 +LDADD+=-lcrypto -lmd
- CFLAGS+=-Wall
++CFLAGS+=-Wall -D__dead=''
  
  .include <bsd.prog.mk>
 diff -rupN dhcpd.orig/bpf.c dhcpd/bpf.c
---- dhcpd.orig/bpf.c	2015-02-02 17:15:30.000000000 +0200
-+++ dhcpd/bpf.c	2015-02-02 18:09:30.000000000 +0200
+--- dhcpd.orig/bpf.c	2015-02-05 11:21:53.000000000 +0200
++++ dhcpd/bpf.c	2015-02-04 12:24:10.000000000 +0200
 @@ -194,8 +194,10 @@ if_register_receive(struct interface_inf
  	if (ioctl(info->rfdesc, BIOCIMMEDIATE, &flag) == -1)
  		error("Can't set immediate mode on bpf device: %m");
  
-+#if 0
++#ifndef __FreeBSD__
  	if (ioctl(info->rfdesc, BIOCSFILDROP, &flag) == -1)
  		error("Can't set filter-drop mode on bpf device: %m");
 +#endif
@@ -25,8 +31,8 @@ diff -rupN dhcpd.orig/bpf.c dhcpd/bpf.c
  	/* make sure kernel fills in the source ethernet address */
  	if (ioctl(info->rfdesc, BIOCSHDRCMPLT, &cmplt) == -1)
 diff -rupN dhcpd.orig/dhcpd.c dhcpd/dhcpd.c
---- dhcpd.orig/dhcpd.c	2015-02-02 17:15:30.000000000 +0200
-+++ dhcpd/dhcpd.c	2015-02-03 12:18:31.000000000 +0200
+--- dhcpd.orig/dhcpd.c	2015-02-05 11:21:54.000000000 +0200
++++ dhcpd/dhcpd.c	2015-02-04 12:24:10.000000000 +0200
 @@ -66,7 +66,11 @@ char *path_dhcpd_db = _PATH_DHCPD_DB;
  char *abandoned_tab = NULL;
  char *changedmac_tab = NULL;
@@ -52,13 +58,16 @@ diff -rupN dhcpd.orig/dhcpd.c dhcpd/dhcpd.c
  
  	opterr = 0;
  	while ((ch = getopt(argc, argv, "A:C:L:c:dfl:nu::Y:y:")) != -1)
-@@ -182,11 +190,11 @@ main(int argc, char *argv[])
+@@ -182,11 +190,14 @@ main(int argc, char *argv[])
  	db_startup();
  	if (!udpsockmode || argc > 0)
  		discover_interfaces(&rdomain);
 -
-+#if 0
  	if (rdomain != -1)
++#ifdef __FreeBSD__
++		if (setfib(rdomain) == -1)
++			error("setfib (%m)");
++#else
  		if (setrtable(rdomain) == -1)
  			error("setrtable (%m)");
 -
@@ -66,96 +75,51 @@ diff -rupN dhcpd.orig/dhcpd.c dhcpd/dhcpd.c
  	if (udpsockmode)
  		udpsock_startup(udpaddr);
  	icmp_startup(1, lease_pinged);
-@@ -216,7 +224,7 @@ main(int argc, char *argv[])
+@@ -216,7 +227,7 @@ main(int argc, char *argv[])
  			exit(1);
  		case 0:
  			/* child process. start up table engine */
 -			pftable_handler();
-+			 pftable_handler(); 
++			pftable_handler(); 
  			/* NOTREACHED */
  			exit(1);
  		default:
-@@ -225,8 +233,10 @@ main(int argc, char *argv[])
+@@ -224,9 +235,13 @@ main(int argc, char *argv[])
+ 			break;
  		}
  	}
- 
--	if (chroot(_PATH_VAREMPTY) == -1)
--		error("chroot %s: %m", _PATH_VAREMPTY);
-+	/*if (chroot(_PATH_VAREMPTY) == -1)
-+		error("chroot %s: %m", _PATH_VAREMPTY); */
+-
++#ifdef __FreeBSD__
 +	if (chroot("/var/empty") == -1)
 +		error("chroot %s: %m", "/var/empty");
++#else
+ 	if (chroot(_PATH_VAREMPTY) == -1)
+ 		error("chroot %s: %m", _PATH_VAREMPTY);
++#endif
  	if (chdir("/") == -1)
  		error("chdir(\"/\"): %m");
  	if (setgroups(1, &pw->pw_gid) ||
-diff -rupN dhcpd.orig/dhcpd.h dhcpd/dhcpd.h
---- dhcpd.orig/dhcpd.h	2015-02-02 17:15:30.000000000 +0200
-+++ dhcpd/dhcpd.h	2015-02-02 17:43:58.000000000 +0200
-@@ -692,7 +692,7 @@ int icmp_echorequest(struct iaddr *);
- void icmp_echoreply(struct protocol *);
- 
- /* pfutils.c */
--__dead void pftable_handler(void);
-+__dead2 void pftable_handler(void);
- void pf_change_table(int, int, struct in_addr, char *);
- void pf_kill_state(int, struct in_addr);
- size_t atomicio(ssize_t (*)(int, void *, size_t), int, void *, size_t);
 diff -rupN dhcpd.orig/dispatch.c dhcpd/dispatch.c
---- dhcpd.orig/dispatch.c	2015-02-02 17:15:30.000000000 +0200
-+++ dhcpd/dispatch.c	2015-02-03 12:36:59.000000000 +0200
-@@ -45,6 +45,11 @@
- #include <poll.h>
- #include <net/if_media.h>
- 
-+#include <sys/types.h>
-+#include <errno.h>
-+#include <stdint.h>
-+#include <stdlib.h>
-+
- extern int syncfd;
- 
- struct interface_info *interfaces;
-@@ -61,6 +66,24 @@ int get_rdomain(char *);
-    register that interface with the network I/O software, figure out what
-    subnet it's on, and add it to the list of interfaces. */
- 
-+/*
-+ * This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
-+ * if both s1 < MUL_NO_OVERFLOW and s2 < MUL_NO_OVERFLOW
-+ */
-+#define MUL_NO_OVERFLOW ((size_t)1 << (sizeof(size_t) * 4))
-+
-+void *
-+reallocarray(void *optr, size_t nmemb, size_t size)
-+{
-+        if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
-+            nmemb > 0 && SIZE_MAX / nmemb < size) {
-+                errno = ENOMEM;
-+                return NULL;
-+        }
-+        return realloc(optr, size * nmemb);
-+}
-+
-+
- void
- discover_interfaces(int *rdomain)
- {
-@@ -633,8 +656,10 @@ get_rdomain(char *name)
+--- dhcpd.orig/dispatch.c	2015-02-05 11:21:54.000000000 +0200
++++ dhcpd/dispatch.c	2015-02-04 12:24:10.000000000 +0200
+@@ -633,9 +633,13 @@ get_rdomain(char *name)
  
  	bzero(&ifr, sizeof(ifr));
  	strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
--	if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
--		rv = ifr.ifr_rdomainid;
-+	//if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
++#ifdef __FreeBSD__
 +	if (ioctl(s, SIOCGIFFIB, (caddr_t)&ifr) != -1)
-+		//rv = ifr.ifr_rdomainid;
 +		rv = ifr.ifr_fib;
- 
++#else
+ 	if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+ 		rv = ifr.ifr_rdomainid;
+-
++#endif
  	close(s);
  	return rv;
+ }
 diff -rupN dhcpd.orig/errwarn.c dhcpd/errwarn.c
---- dhcpd.orig/errwarn.c	2015-02-02 17:15:30.000000000 +0200
-+++ dhcpd/errwarn.c	2015-02-02 18:20:57.000000000 +0200
+--- dhcpd.orig/errwarn.c	2015-02-05 11:21:54.000000000 +0200
++++ dhcpd/errwarn.c	2015-02-04 12:24:10.000000000 +0200
 @@ -47,6 +47,10 @@
  
  #include "dhcpd.h"
@@ -246,33 +210,68 @@ diff -rupN dhcpd.orig/errwarn.c dhcpd/errwarn.c
  
  	warnings_occurred = 1;
 diff -rupN dhcpd.orig/pfutils.c dhcpd/pfutils.c
---- dhcpd.orig/pfutils.c	2015-02-02 17:15:30.000000000 +0200
-+++ dhcpd/pfutils.c	2015-02-02 18:12:50.000000000 +0200
-@@ -45,7 +45,7 @@ extern char *abandoned_tab;
- extern char *changedmac_tab;
- extern char *leased_tab;
- 
--__dead void
-+__dead2 void
- pftable_handler()
- {
- 	struct pf_cmd cmd;
-@@ -54,8 +54,11 @@ pftable_handler()
+--- dhcpd.orig/pfutils.c	2015-02-05 11:21:54.000000000 +0200
++++ dhcpd/pfutils.c	2015-02-04 12:24:10.000000000 +0200
+@@ -54,8 +54,13 @@ pftable_handler()
  
  	if ((fd = open(_PATH_DEV_PF, O_RDWR|O_NOFOLLOW, 0660)) == -1)
  		error("can't open pf device: %m");
 -	if (chroot(_PATH_VAREMPTY) == -1)
-+	/* if (chroot(_PATH_VAREMPTY) == -1)
- 		error("chroot %s: %m", _PATH_VAREMPTY);
-+	*/
++#ifdef __FreeBSD__
 +	if (chroot("/var/empty") == -1)
 +		error("chroot %s: %m", "/var/empty");
++#else
++	 if (chroot(_PATH_VAREMPTY) == -1)
+ 		error("chroot %s: %m", _PATH_VAREMPTY);
++#endif
  	if (chdir("/") == -1)
  		error("chdir(\"/\"): %m");
  	if (setgroups(1, &pw->pw_gid) ||
+diff -rupN dhcpd.orig/reallocarray.c dhcpd/reallocarray.c
+--- dhcpd.orig/reallocarray.c	1970-01-01 02:00:00.000000000 +0200
++++ dhcpd/reallocarray.c	2015-02-04 12:24:10.000000000 +0200
+@@ -0,0 +1,38 @@
++/*	$OpenBSD: reallocarray.c,v 1.1 2014/05/08 21:43:49 deraadt Exp $	*/
++/*
++ * Copyright (c) 2008 Otto Moerbeek <otto@drijf.net>
++ *
++ * Permission to use, copy, modify, and distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <sys/types.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdlib.h>
++
++/*
++ * This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
++ * if both s1 < MUL_NO_OVERFLOW and s2 < MUL_NO_OVERFLOW
++ */
++#define MUL_NO_OVERFLOW	((size_t)1 << (sizeof(size_t) * 4))
++
++void *
++reallocarray(void *optr, size_t nmemb, size_t size)
++{
++	if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
++	    nmemb > 0 && SIZE_MAX / nmemb < size) {
++		errno = ENOMEM;
++		return NULL;
++	}
++	return realloc(optr, size * nmemb);
++}
 diff -rupN dhcpd.orig/sync.c dhcpd/sync.c
---- dhcpd.orig/sync.c	2015-02-02 17:15:30.000000000 +0200
-+++ dhcpd/sync.c	2015-02-02 18:21:32.000000000 +0200
+--- dhcpd.orig/sync.c	2015-02-05 11:21:54.000000000 +0200
++++ dhcpd/sync.c	2015-02-04 12:24:10.000000000 +0200
 @@ -38,7 +38,7 @@
  #include <stdlib.h>
  #include <string.h>
