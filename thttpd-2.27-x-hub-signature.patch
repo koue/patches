@@ -1,0 +1,44 @@
+diff -rupN thttpd-2.27.orig/libhttpd.c thttpd-2.27/libhttpd.c
+--- thttpd-2.27.orig/libhttpd.c	2017-09-29 17:19:52.567794000 +0000
++++ thttpd-2.27/libhttpd.c	2017-09-29 17:23:25.835246000 +0000
+@@ -1746,6 +1746,7 @@ httpd_get_conn( httpd_server* hs, int li
+     hc->query[0] = '\0';
+     hc->referrer = "";
+     hc->useragent = "";
++    hc->x_hub_signature = "";
+     hc->accept[0] = '\0';
+     hc->accepte[0] = '\0';
+     hc->acceptl = "";
+@@ -2093,6 +2094,12 @@ httpd_parse_request( httpd_conn* hc )
+ 		cp += strspn( cp, " \t" );
+ 		hc->useragent = cp;
+ 		}
++	    else if ( strncasecmp( buf, "X-Hub-Signature:", 16 ) == 0 )
++	    {
++		    cp = &buf[16];
++		    cp += strspn( cp, " \t" );
++		    hc->x_hub_signature = cp;
++	    }
+ 	    else if ( strncasecmp( buf, "Host:", 5 ) == 0 )
+ 		{
+ 		cp = &buf[5];
+@@ -3093,6 +3100,8 @@ make_envp( httpd_conn* hc )
+ 	}
+     if ( hc->useragent[0] != '\0' )
+ 	envp[envn++] = build_env( "HTTP_USER_AGENT=%s", hc->useragent );
++    if ( hc->x_hub_signature[0] != '\0' )
++	    envp[envn++] = build_env( "HTTP_X_HUB_SIGNATURE=%s", hc->x_hub_signature );
+     if ( hc->accept[0] != '\0' )
+ 	envp[envn++] = build_env( "HTTP_ACCEPT=%s", hc->accept );
+     if ( hc->accepte[0] != '\0' )
+diff -rupN thttpd-2.27.orig/libhttpd.h thttpd-2.27/libhttpd.h
+--- thttpd-2.27.orig/libhttpd.h	2017-09-29 17:19:52.573043000 +0000
++++ thttpd-2.27/libhttpd.h	2017-09-29 17:20:46.289143000 +0000
+@@ -112,6 +112,7 @@ typedef struct {
+     char* query;
+     char* referrer;
+     char* useragent;
++    char* x_hub_signature;
+     char* accept;
+     char* accepte;
+     char* acceptl;
